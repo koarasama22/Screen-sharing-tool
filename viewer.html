@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>画面共有（閲覧側）</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.2/peerjs.min.js"></script>
+<style>
+  body {
+    font-family: -apple-system, "Segoe UI", sans-serif;
+    max-width: 820px;
+    margin: 60px auto;
+    padding: 0 20px;
+    color: #222;
+    background: #f7f7f8;
+  }
+  h1 { font-size: 20px; }
+  .card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    margin-bottom: 16px;
+  }
+  input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 12px;
+    font-size: 18px;
+    text-align: center;
+    letter-spacing: 2px;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    margin: 12px 0;
+  }
+  button {
+    width: 100%;
+    padding: 14px;
+    font-size: 16px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    background: #2563eb;
+    color: #fff;
+  }
+  .status { margin-top: 12px; font-size: 14px; color: #555; }
+  video { width: 100%; border-radius: 8px; margin-top: 16px; background:#000; display:none; }
+</style>
+</head>
+<body>
+  <h1>画面共有（閲覧側）</h1>
+  <div class="card">
+    <p>送信側のページに表示された接続コードを入力してください：</p>
+    <input type="text" id="codeInput" placeholder="接続コードを入力">
+    <button id="connectBtn">接続する</button>
+    <div class="status" id="statusText">未接続</div>
+    <video id="remoteVideo" autoplay playsinline></video>
+  </div>
+</body>
+<script>
+const peer = new Peer();
+const connectBtn = document.getElementById('connectBtn');
+const codeInput = document.getElementById('codeInput');
+const statusText = document.getElementById('statusText');
+const remoteVideo = document.getElementById('remoteVideo');
+
+peer.on('open', () => {
+  statusText.textContent = '準備完了。接続コードを入力してください。';
+});
+
+peer.on('error', (err) => {
+  console.error(err);
+  statusText.textContent = 'エラー: ' + err.type;
+});
+
+connectBtn.addEventListener('click', () => {
+  const targetId = codeInput.value.trim();
+  if (!targetId) return;
+
+  statusText.textContent = '接続中...';
+  // 受信専用なので空のダミーストリームを渡す
+  const dummyStream = new MediaStream();
+  const call = peer.call(targetId, dummyStream);
+
+  call.on('stream', (remoteStream) => {
+    remoteVideo.srcObject = remoteStream;
+    remoteVideo.style.display = 'block';
+    statusText.textContent = '接続中：画面を受信しています';
+  });
+
+  call.on('close', () => {
+    remoteVideo.style.display = 'none';
+    statusText.textContent = '相手が共有を停止しました';
+  });
+
+  call.on('error', (e) => {
+    statusText.textContent = '接続エラー';
+    console.error(e);
+  });
+});
+</script>
+</html>

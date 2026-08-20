@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>画面共有（送信側）</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.2/peerjs.min.js"></script>
+<style>
+  body {
+    font-family: -apple-system, "Segoe UI", sans-serif;
+    max-width: 520px;
+    margin: 60px auto;
+    padding: 0 20px;
+    color: #222;
+    background: #f7f7f8;
+  }
+  h1 { font-size: 20px; }
+  .card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    margin-bottom: 16px;
+  }
+  .code {
+    font-size: 28px;
+    font-weight: bold;
+    letter-spacing: 2px;
+    background: #eef2ff;
+    padding: 12px 16px;
+    border-radius: 8px;
+    text-align: center;
+    margin: 12px 0;
+    user-select: all;
+  }
+  button {
+    width: 100%;
+    padding: 14px;
+    font-size: 16px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+  }
+  #startBtn { background: #2563eb; color: #fff; }
+  #startBtn:disabled { background: #9ca3af; }
+  #stopBtn { background: #dc2626; color: #fff; display: none; }
+  .status { margin-top: 12px; font-size: 14px; color: #555; }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; }
+  .dot.on { background:#16a34a; }
+  .dot.off { background:#9ca3af; }
+  .note { font-size: 13px; color: #777; line-height: 1.6; }
+  video { width: 100%; border-radius: 8px; margin-top: 12px; background:#000; }
+</style>
+</head>
+<body>
+  <h1>画面共有（送信側）</h1>
+  <div class="card">
+    <p>接続コード（見る側の人に伝えてください）：</p>
+    <div class="code" id="peerId">読み込み中...</div>
+
+    <button id="startBtn">共有を開始する</button>
+    <button id="stopBtn">共有を停止する</button>
+
+    <div class="status">
+      <span class="dot off" id="statusDot"></span>
+      <span id="statusText">停止中</span>
+    </div>
+    <video id="preview" autoplay muted playsinline style="display:none;"></video>
+  </div>
+
+  <div class="card note">
+    <strong>操作について</strong><br>
+    ・「共有を開始する」を押すと、共有する画面/ウィンドウ/タブを選ぶダイアログが出ます。<br>
+    ・共有中はChromeが画面下または上に共有バーを表示します。そのバーの「共有を停止」からもいつでも止められます。<br>
+    ・このページを閉じる、またはブラウザタブを閉じると共有は終了します（裏で動き続けることはありません）。<br>
+    ・共有開始のたびに新しい接続コードが発行されます。
+  </div>
+
+<script>
+let peer = null;
+let currentCall = null;
+let screenStream = null;
+
+const peerIdEl = document.getElementById('peerId');
+const startBtn = document.getElementById('startBtn');
+const stopBtn = document.getElementById('stopBtn');
+const statusDot = document.getElementById('statusDot');
+const statusText = document.getElementById('statusText');
+const preview = document.getElementById('preview');
+
+function setStatus(on, text) {
+  statusDot.className = 'dot ' + (on ? 'on' : 'off');
+  statusText.textContent = text;
+}
+
+function initPeer() {
+  peer = new Peer(); // PeerJSの無料クラウドブローカーを使用
+  peer.on('open', (id) => {
+    peerIdEl.textContent = id;
+  });
+  peer.on('call', (call) => {
+    // 見る側からの接続要求。共有中のストリームがあれば応答する
+    if (screenStream) {
+      call.answer(screenStream);
+      currentCall = call;
+    }
+  });
+  peer.on('error', (err) => {
+    console.error(err);
+    setStatus(false, 'エラー: ' + err.type);
+  });
+}
+
+startBtn.addEventListener('click', async () => {
+  try {
+    screenStream = await navigator.mediaDevices.getDisplayMedia({
+      video: { cursor: "always" },
+      audio: false
+    });
+  } catch (e) {
+    alert('画面の選択がキャンセルされました。');
+    return;
+  }
+
+  preview.srcObject = screenStream;
+  preview.style.display = 'block';
+  startBtn.style.display = 'none';
+  stopBtn.style.display = 'block';
+  setStatus(true, '共有中');
+
+  // Chrome標準の「共有停止」ボタンが押されたときも検知して止める
+  screenStream.getVideoTracks()[0].addEventListener('ended', stopSharing);
+});
+
+stopBtn.addEventListener('click', stopSharing);
+
+function stopSharing() {
+  if (screenStream) {
+    screenStream.getTracks().forEach(t => t.stop());
+    screenStream = null;
+  }
+  if (currentCall) {
+    currentCall.close();
+    currentCall = null;
+  }
+  preview.style.display = 'none';
+  startBtn.style.display = 'block';
+  stopBtn.style.display = 'none';
+  setStatus(false, '停止中');
+}
+
+// ページを閉じたら確実に止める
+window.addEventListener('beforeunload', () => {
+  if (screenStream) screenStream.getTracks().forEach(t => t.stop());
+});
+
+initPeer();
+</script>
+</body>
+</html>
